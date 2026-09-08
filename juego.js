@@ -31,6 +31,8 @@ let onlineMode = false;
 let onlineRoomId = '';
 let onlinePlayerId = '';
 let onlineUnsubscribe = null;
+let lastOnlineRollId = '';
+let lastOnlineCardId = '';
 
 function cellCoord(n){
   const idx=n-1, rowFromBottom=Math.floor(idx/10), colInRow=idx%10;
@@ -103,6 +105,16 @@ function updateOnlinePlayers(data){
     id,name:player.name||`Jugador ${index+1}`,human:id===onlinePlayerId,pos:player.pos||0,turnosPerdidos:0,jugoLE:false,color:player.color||PLAYER_COLORS[index%PLAYER_COLORS.length]
   }));
   renderTokens();
+  const recentRoll=data.lastRollId && data.lastRollId!==lastOnlineRollId;
+  const recentCard=data.cardEvent?.id && data.cardEvent.id!==lastOnlineCardId;
+  if(recentRoll){
+    lastOnlineRollId=data.lastRollId;
+    showOnlineRollResult(data.lastRoll,data.lastRoller);
+  }
+  if(recentCard){
+    lastOnlineCardId=data.cardEvent.id;
+    playOnlineCard(data.cardEvent.card);
+  }
   const total=players.length;
   if(data.status==='finished'){
     document.getElementById('turnInfo').textContent=`🏆 ${data.winner||'La partida'} ganó la partida`;
@@ -110,11 +122,40 @@ function updateOnlinePlayers(data){
   }else if(data.status==='playing'){
     const activePlayer=players.find(player=>player.id===data.turn);
     document.getElementById('turnInfo').textContent=`Sala ${onlineRoomId} — turno de ${activePlayer?.name||'otro jugador'}`;
-    if(data.turn===onlinePlayerId) showOnlineTurn(); else hideModal('turnModal');
+    if(data.turn===onlinePlayerId){
+      if(recentCard)setTimeout(()=>{if(onlineMode)showOnlineTurn();},CARD_RESULT_TIME);
+      else if(recentRoll)setTimeout(()=>{if(onlineMode)showOnlineTurn();},DICE_RESULT_TIME);
+      else showOnlineTurn();
+    }else if(!recentRoll&&!recentCard)hideModal('turnModal');
   }else{
     document.getElementById('turnInfo').textContent=`Sala ${onlineRoomId} — esperando jugadores (${total}/2)`;
     hideModal('turnModal');
   }
+}
+function showOnlineRollResult(dice,roller){
+  document.getElementById('diceDisplay').textContent=`🎲 ${dice}`;
+  document.getElementById('modalDice').textContent=`🎲 ${dice}`;
+  document.getElementById('turnTitle').textContent=`Tirada de ${roller||'jugador'}`;
+  document.getElementById('turnMessage').textContent=`Salió el número ${dice}.`;
+  document.getElementById('rollBtn').disabled=true;
+  showModal('turnModal');
+  setTimeout(()=>{if(onlineMode)hideModal('turnModal');},DICE_RESULT_TIME);
+}
+async function playOnlineCard(card){
+  if(!card)return;
+  prepararCartaVisual({},card);
+  const spinBtn=document.getElementById('spinBtn');
+  const wheel=document.getElementById('cardWheel');
+  const cardArt=document.getElementById('cardArt');
+  spinBtn.disabled=true; showModal('cardModal'); wheel.classList.add('spinning');
+  const opciones=[...MAZO_BONO,...MAZO_CONTRATIEMPO];
+  for(let i=0;i<11;i++){
+    const visual=opciones[Math.floor(Math.random()*opciones.length)];
+    cardArt.innerHTML=`<img src="${visual.imagen}" alt="Carta en movimiento">`;
+    await sleep(55+i*28);
+  }
+  wheel.classList.remove('spinning'); revelarCartaVisual(card);
+  await sleep(CARD_RESULT_TIME); if(onlineMode)hideModal('cardModal');
 }
 function showOnlineTurn(){
   const rollBtn=document.getElementById('rollBtn');
@@ -131,14 +172,20 @@ async function rollOnlineTurn(){
   let position=Math.min(META,current.pos+dice);
   if(ESCALERAS[position])position=ESCALERAS[position].to;
   if(SERPIENTES[position])position=SERPIENTES[position];
+  let card=null;
   if(CARD_CELLS.has(position)){
-    const card=robarCarta(CARD_TYPES[position]);
+    card=robarCarta(CARD_TYPES[position]);
     if(card.valor)position=Math.max(0,Math.min(META,position+card.valor));
   }
   const other=players.find(player=>player.id!==onlinePlayerId);
   const changes={};
   changes[`jugadores/${onlinePlayerId}/pos`]=position;
   changes.lastRoll=dice;
+  changes.lastRollId=`${onlinePlayerId}-${Date.now()}`;
+  changes.lastRoller=current.name;
+  if(card){
+    changes.cardEvent={id:`${onlinePlayerId}-card-${Date.now()}`,card};
+  }
   if(position>=META){changes.status='finished';changes.winner=current.name;}
   else if(other)changes.turn=other.id;
   await update(ref(database,`rooms/${onlineRoomId}`),changes);
