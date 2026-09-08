@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>El Camino al Título</title>
+  <link rel="stylesheet" href="estilos.css">
+</head>
+<body>
+  <section id="menuScreen" class="screen menu-screen">
+    <h1>🏆 El Camino al Título</h1>
+    <div class="subtitle">Juega tu camino al título contra bots — tipo Serpientes y Escaleras</div>
+
+    <div class="mode-selection">
+      <button id="botsMode" class="mode-card selected" type="button">
+        <span class="mode-icon">🤖</span>
+        <span class="mode-name">Jugar con Bots</span>
+        <span class="mode-description">Compite contra jugadores controlados por la computadora.</span>
+      </button>
+      <button class="mode-card disabled" type="button" disabled>
+        <span class="mode-icon">🌐</span>
+        <span class="mode-name">Jugar Online</span>
+        <span class="mode-description">Próximamente</span>
+      </button>
+    </div>
+
+    <div id="botSetup" class="setup-panel box">
+      <h2>Configura tu partida</h2>
+      <div class="setup-fields">
+        <label for="numPlayers">Número de jugadores</label>
+        <select id="numPlayers">
+          <option value="2">2</option><option value="3">3</option><option value="4" selected>4</option>
+          <option value="5">5</option><option value="6">6</option><option value="7">7</option>
+        </select>
+        <label for="speed">Velocidad de simulación</label>
+        <select id="speed"><option value="900">Lenta</option><option value="500" selected>Normal</option><option value="150">Rápida</option></select>
+      </div>
+      <button id="startBtn" class="primary-button" type="button">▶ Iniciar juego</button>
+    </div>
+  </section>
+
+  <section id="gameScreen" class="screen game-screen hidden">
+    <header class="game-header">
+      <h1>🏆 El Camino al Título</h1>
+      <div class="subtitle">Juega tu camino al título contra bots — tipo Serpientes y Escaleras</div>
+    </header>
+    <div class="game-actions">
+      <button id="resetBtn" class="small-action reset-action" type="button">⟲ Reiniciar</button>
+      <button id="menuBtn" class="small-action menu-action" type="button">⌂ Volver al menú</button>
+    </div>
+
+    <main class="layout">
+      <div class="board-wrap">
+        <div id="board"></div>
+        <svg id="svg-overlay"></svg>
+      </div>
+      <aside class="panel">
+        <div class="box turn-box">
+          <h3>Turno actual</h3>
+          <div id="turnInfo">Preparando la partida...</div>
+          <div id="diceDisplay">🎲</div>
+        </div>
+        <div class="legend-help">
+          <button class="legend-trigger" type="button" aria-label="Mostrar leyenda">i</button>
+          <div class="legend-popover" role="tooltip">
+            <strong>Leyenda</strong>
+            <div class="legend-item"><span class="swatch ladder-swatch"></span> Escalera verde</div>
+            <div class="legend-item"><span class="swatch snake-swatch"></span> Serpiente roja</div>
+            <div class="legend-item"><span class="swatch card-swatch"></span> Casilla de carta</div>
+          </div>
+        </div>
+      </aside>
+    </main>
+    <div id="winnerBanner"></div>
+  </section>
+
+  <div id="turnModal" class="modal-backdrop hidden">
+    <div class="game-modal">
+      <h2 id="turnTitle">Tu turno</h2><p id="turnMessage">Presiona el botón para tirar los dados.</p>
+      <div id="modalDice" class="modal-dice">🎲</div>
+      <button id="rollBtn" class="modal-button">🎲 Tirar los dados</button>
+    </div>
+  </div>
+
+  <div id="cardModal" class="modal-backdrop hidden">
+    <div id="cardModalBox" class="game-modal card-modal">
+      <div class="card-frame">
+        <div id="cardType" class="card-type">CARTA ESPECIAL</div><div id="cardWheel" class="card-wheel">?</div>
+        <div id="cardArt" class="card-art">🃏</div><div id="cardDescription" class="card-description">Gira la ruleta para descubrir la carta.</div>
+        <div id="cardEffect" class="card-effect">EFECTO: pendiente de revelar</div><div id="cardBadge" class="card-badge">CASILLA ESPECIAL</div>
+      </div>
+      <p id="cardMessage">Gira la ruleta para descubrir tu carta.</p><button id="spinBtn" class="modal-button">🎡 Girar ruleta</button>
+    </div>
+  </div>
+
+  <script src="juego.js"></script>
+</body>
+</html>
