@@ -107,13 +107,15 @@ function updateOnlinePlayers(data){
   renderTokens();
   const recentRoll=data.lastRollId && data.lastRollId!==lastOnlineRollId;
   const recentCard=data.cardEvent?.id && data.cardEvent.id!==lastOnlineCardId;
+  const showingRoll=data.lastRollId && data.lastRollId===lastOnlineRollId;
+  const showingCard=data.cardEvent?.id && data.cardEvent.id===lastOnlineCardId;
   if(recentRoll){
     lastOnlineRollId=data.lastRollId;
     showOnlineRollResult(data.lastRoll,data.lastRoller);
   }
   if(recentCard){
     lastOnlineCardId=data.cardEvent.id;
-    playOnlineCard(data.cardEvent.card);
+    setTimeout(()=>{if(onlineMode)playOnlineCard(data.cardEvent.card);},DICE_RESULT_TIME);
   }
   const total=players.length;
   if(data.status==='finished'){
@@ -123,10 +125,10 @@ function updateOnlinePlayers(data){
     const activePlayer=players.find(player=>player.id===data.turn);
     document.getElementById('turnInfo').textContent=`Sala ${onlineRoomId} — turno de ${activePlayer?.name||'otro jugador'}`;
     if(data.turn===onlinePlayerId){
-      if(recentCard)setTimeout(()=>{if(onlineMode)showOnlineTurn();},CARD_RESULT_TIME);
+      if(recentCard)setTimeout(()=>{if(onlineMode)showOnlineTurn();},DICE_RESULT_TIME+CARD_RESULT_TIME);
       else if(recentRoll)setTimeout(()=>{if(onlineMode)showOnlineTurn();},DICE_RESULT_TIME);
       else showOnlineTurn();
-    }else if(!recentRoll&&!recentCard)hideModal('turnModal');
+    }else if(!recentRoll&&!recentCard&&!showingRoll&&!showingCard)hideModal('turnModal');
   }else{
     document.getElementById('turnInfo').textContent=`Sala ${onlineRoomId} — esperando jugadores (${total}/2)`;
     hideModal('turnModal');
@@ -178,16 +180,24 @@ async function rollOnlineTurn(){
     if(card.valor)position=Math.max(0,Math.min(META,position+card.valor));
   }
   const other=players.find(player=>player.id!==onlinePlayerId);
+  const rollId=`${onlinePlayerId}-${Date.now()}`;
+  const cardId=card?`${onlinePlayerId}-card-${Date.now()}`:'';
   const changes={};
   changes[`jugadores/${onlinePlayerId}/pos`]=position;
   changes.lastRoll=dice;
-  changes.lastRollId=`${onlinePlayerId}-${Date.now()}`;
+  changes.lastRollId=rollId;
   changes.lastRoller=current.name;
   if(card){
-    changes.cardEvent={id:`${onlinePlayerId}-card-${Date.now()}`,card};
+    changes.cardEvent={id:cardId,card};
   }
   if(position>=META){changes.status='finished';changes.winner=current.name;}
   else if(other)changes.turn=other.id;
+  lastOnlineRollId=rollId;
+  showOnlineRollResult(dice,current.name);
+  if(card){
+    lastOnlineCardId=cardId;
+    setTimeout(()=>{if(onlineMode)playOnlineCard(card);},DICE_RESULT_TIME);
+  }
   await update(ref(database,`rooms/${onlineRoomId}`),changes);
 }
 function listenToOnlineRoom(){
