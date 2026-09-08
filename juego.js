@@ -33,6 +33,7 @@ let onlinePlayerId = '';
 let onlineUnsubscribe = null;
 let lastOnlineRollId = '';
 let lastOnlineCardId = '';
+let lastOnlineSkipKey = '';
 
 function cellCoord(n){
   const idx=n-1, rowFromBottom=Math.floor(idx/10), colInRow=idx%10;
@@ -102,7 +103,7 @@ function getOnlineName(){return document.getElementById('onlineName').value.trim
 function updateOnlinePlayers(data){
   const remotePlayers=data.jugadores||{};
   players=Object.entries(remotePlayers).map(([id,player],index)=>({
-    id,name:player.name||`Jugador ${index+1}`,human:id===onlinePlayerId,pos:player.pos||0,turnosPerdidos:0,jugoLE:false,color:player.color||PLAYER_COLORS[index%PLAYER_COLORS.length]
+    id,name:player.name||`Jugador ${index+1}`,human:id===onlinePlayerId,pos:player.pos||0,turnosPerdidos:player.turnosPerdidos||0,extraTiros:player.extraTiros||0,jugoLE:false,color:player.color||PLAYER_COLORS[index%PLAYER_COLORS.length]
   }));
   renderTokens();
   const recentRoll=data.lastRollId && data.lastRollId!==lastOnlineRollId;
@@ -160,11 +161,24 @@ async function playOnlineCard(card){
   await sleep(CARD_RESULT_TIME); if(onlineMode)hideModal('cardModal');
 }
 function showOnlineTurn(){
+  const current=players.find(player=>player.id===onlinePlayerId);
+  if(current?.turnosPerdidos>0){skipOnlineTurn(current);return;}
   const rollBtn=document.getElementById('rollBtn');
   document.getElementById('turnTitle').textContent='Tu turno online';
   document.getElementById('turnMessage').textContent='Tira el dado para avanzar.';
   document.getElementById('modalDice').textContent='🎲';
   rollBtn.disabled=false; rollBtn.onclick=rollOnlineTurn; showModal('turnModal');
+}
+async function skipOnlineTurn(current){
+  const skipKey=`${onlineRoomId}-${current.id}-${current.turnosPerdidos}`;
+  if(lastOnlineSkipKey===skipKey)return;
+  lastOnlineSkipKey=skipKey;
+  document.getElementById('turnInfo').textContent=`${current.name} pierde este turno por una carta.`;
+  hideModal('turnModal');
+  await sleep(1200);
+  if(!onlineMode)return;
+  const other=players.find(player=>player.id!==onlinePlayerId);
+  if(other)await update(ref(database,`rooms/${onlineRoomId}`),{[`jugadores/${onlinePlayerId}/turnosPerdidos`]:current.turnosPerdidos-1,turn:other.id});
 }
 async function rollOnlineTurn(){
   const current=players.find(player=>player.id===onlinePlayerId);
@@ -184,6 +198,9 @@ async function rollOnlineTurn(){
   const cardId=card?`${onlinePlayerId}-card-${Date.now()}`:'';
   const changes={};
   changes[`jugadores/${onlinePlayerId}/pos`]=position;
+  if(card?.turnosPerdidos)changes[`jugadores/${onlinePlayerId}/turnosPerdidos`]=(current.turnosPerdidos||0)+card.turnosPerdidos;
+  const extraTirosRestantes=Math.max(0,(current.extraTiros||0)-1)+(card?.extraTiros||0);
+  changes[`jugadores/${onlinePlayerId}/extraTiros`]=extraTirosRestantes;
   changes.lastRoll=dice;
   changes.lastRollId=rollId;
   changes.lastRoller=current.name;
@@ -191,6 +208,7 @@ async function rollOnlineTurn(){
     changes.cardEvent={id:cardId,card};
   }
   if(position>=META){changes.status='finished';changes.winner=current.name;}
+  else if(dice===6||extraTirosRestantes>0)changes.turn=onlinePlayerId;
   else if(other)changes.turn=other.id;
   lastOnlineRollId=rollId;
   showOnlineRollResult(dice,current.name);
@@ -211,7 +229,7 @@ async function createOnlineRoom(){
   const name=getOnlineName();
   onlineRoomId=createRoomCode();
   onlinePlayerId=push(ref(database,`rooms/${onlineRoomId}/jugadores`)).key;
-  await set(ref(database,`rooms/${onlineRoomId}`),{status:'waiting',createdAt:Date.now(),jugadores:{[onlinePlayerId]:{name,pos:0,color:PLAYER_COLORS[0]}}});
+  await set(ref(database,`rooms/${onlineRoomId}`),{status:'waiting',createdAt:Date.now(),jugadores:{[onlinePlayerId]:{name,pos:0,turnosPerdidos:0,extraTiros:0,color:PLAYER_COLORS[0]}}});
   onlineMode=true; running=false; showGameScreen(); buildBoard(); listenToOnlineRoom();
   setOnlineStatus(`Sala creada: ${onlineRoomId}`);
   document.getElementById('turnInfo').textContent=`Sala ${onlineRoomId} — comparte el código con otro jugador`;
@@ -225,7 +243,7 @@ async function joinOnlineRoom(){
   if(Object.keys(room.jugadores||{}).length>=2){setOnlineStatus('La sala ya está llena.');return;}
   onlineRoomId=code; onlinePlayerId=push(ref(database,`rooms/${code}/jugadores`)).key;
   const firstPlayerId=Object.keys(room.jugadores||{})[0];
-  await update(ref(database,`rooms/${code}`),{status:'playing',turn:firstPlayerId,[`jugadores/${onlinePlayerId}`]:{name:getOnlineName(),pos:0,color:PLAYER_COLORS[1]}});
+  await update(ref(database,`rooms/${code}`),{status:'playing',turn:firstPlayerId,[`jugadores/${onlinePlayerId}`]:{name:getOnlineName(),pos:0,turnosPerdidos:0,extraTiros:0,color:PLAYER_COLORS[1]}});
   onlineMode=true; running=false; showGameScreen(); buildBoard(); listenToOnlineRoom();
 }
 async function jugar(){let turno=1,ganador=null;while(!ganador&&running){for(const p of players){if(!running)return;document.getElementById('turnInfo').innerHTML=`Turno ${turno} — le toca a <b>${p.name}</b>`;if(p.turnosPerdidos>0){p.turnosPerdidos--;await sleep(delay*.5);continue;}await moverPorDado(p);if(puedeGanar(p)){ganador=p;break;}}turno++;await sleep(delay*.4);}if(ganador){hideModal('turnModal');hideModal('cardModal');document.getElementById('turnInfo').innerHTML='🎉 ¡Partida terminada!';const banner=document.getElementById('winnerBanner');banner.style.display='block';banner.textContent=`🏆 ${ganador.name} se tituló primero y gana el juego!`;running=false;document.getElementById('startBtn').disabled=false;}}
@@ -251,7 +269,7 @@ document.getElementById('startBtn').addEventListener('click',async()=>{
 });
 document.getElementById('resetBtn').addEventListener('click',()=>{
   if(onlineMode){
-    const resetPlayers={}; players.forEach(player=>{resetPlayers[`jugadores/${player.id}/pos`]=0;});
+    const resetPlayers={}; players.forEach(player=>{resetPlayers[`jugadores/${player.id}/pos`]=0;resetPlayers[`jugadores/${player.id}/turnosPerdidos`]=0;resetPlayers[`jugadores/${player.id}/extraTiros`]=0;});
     update(ref(database,`rooms/${onlineRoomId}`),{...resetPlayers,status:'playing',turn:players[0]?.id||onlinePlayerId,winner:null,lastRoll:null});
     return;
   }
