@@ -17,11 +17,24 @@
         <span class="mode-name">Jugar con Bots</span>
         <span class="mode-description">Compite contra jugadores controlados por la computadora.</span>
       </button>
-      <button class="mode-card disabled" type="button" disabled>
+      <button id="onlineMode" class="mode-card" type="button">
         <span class="mode-icon">🌐</span>
         <span class="mode-name">Jugar Online</span>
-        <span class="mode-description">Próximamente</span>
+        <span class="mode-description">Crea una sala y juega con otra persona.</span>
       </button>
+    </div>
+
+    <div id="onlineSetup" class="setup-panel box hidden">
+      <h2>Partida online</h2>
+      <label for="onlineName">Tu nombre</label>
+      <input id="onlineName" class="text-input" type="text" maxlength="16" placeholder="Escribe tu nombre">
+      <div class="online-room-actions">
+        <button id="createRoomBtn" class="primary-button" type="button">Crear sala</button>
+        <button id="joinRoomBtn" class="secondary-button" type="button">Unirse a sala</button>
+      </div>
+      <label for="roomCode">Código de sala</label>
+      <input id="roomCode" class="text-input" type="text" maxlength="6" placeholder="Ej. ABC123">
+      <div id="onlineStatus" class="online-status" aria-live="polite"></div>
     </div>
 
     <div id="botSetup" class="setup-panel box">
@@ -93,6 +106,6 @@
     </div>
   </div>
 
-  <script src="juego.js"></script>
+  <script type="module" src="juego.js"></script>
 </body>
 </html>
