@@ -5,8 +5,9 @@ const CELL = 56;
 const META = 100;
 const ESCALERAS = {7:{to:27,color:'green'},43:{to:64,color:'red'}};
 const SERPIENTES = {88:68,96:76};
-const CARD_TYPES = {8:'bono',30:'bono',52:'bono',18:'contratiempo',68:'contratiempo',82:'contratiempo'};
+const CARD_TYPES = {8:'bono',18:'contratiempo',30:'bono',52:'bono',68:'contratiempo',75:'bono',82:'contratiempo',92:'bono'};
 const CARD_CELLS = new Set(Object.keys(CARD_TYPES).map(Number));
+const FAVORITE_LE_CELLS = new Set([8,30,52]);
 const MAZO_BONO = [
   {nombre:'Terminaste Libre Elección',desc:'Avanza 22 créditos de una sola vez',valor:22,esLE:true,imagen:'cartas/bono_libre_eleccion.png'},
   {nombre:'Completaste Servicio Social',desc:'Avanza 16 créditos de inmediato',valor:16,imagen:'cartas/bono_servicio_social.png'},
@@ -90,20 +91,25 @@ async function waitForCardSpin(p,carta){const spinBtn=document.getElementById('s
     await sleep(55+i*28);
   }
   wheel.classList.remove('spinning');revelarCartaVisual(carta);await sleep(CARD_RESULT_TIME);hideModal('cardModal');}
-function robarCarta(tipo){const mazo=tipo==='bono'?MAZO_BONO:MAZO_CONTRATIEMPO;return {...mazo[Math.floor(Math.random()*mazo.length)],tipo};}
+function robarCarta(tipo,favoreceLE=false){
+  const mazo=tipo==='bono'?MAZO_BONO:MAZO_CONTRATIEMPO;
+  if(tipo==='bono'&&Math.random()<(favoreceLE?.5:.2))return {...MAZO_BONO.find(carta=>carta.esLE),tipo};
+  const opciones=mazo.filter(carta=>!carta.esLE);
+  return {...opciones[Math.floor(Math.random()*opciones.length)],tipo};
+}
 async function aplicarCarta(p,carta){await waitForCardSpin(p,carta);if(carta.esLE)p.jugoLE=true;if(carta.valor)p.pos=Math.max(0,Math.min(META,p.pos+carta.valor));if(carta.turnosPerdidos)p.turnosPerdidos+=carta.turnosPerdidos;renderTokens();if(carta.extraTiros)for(let i=0;i<carta.extraTiros;i++)await moverPorDado(p);}
-async function resolverCasilla(p){const pos=p.pos;if(ESCALERAS[pos]){p.pos=ESCALERAS[pos].to;renderTokens();}else if(SERPIENTES[pos]){p.pos=SERPIENTES[pos];renderTokens();}else if(CARD_CELLS.has(pos))await aplicarCarta(p,robarCarta(CARD_TYPES[pos]));}
+async function resolverCasilla(p){const pos=p.pos;if(ESCALERAS[pos]){p.pos=ESCALERAS[pos].to;renderTokens();}else if(SERPIENTES[pos]){p.pos=SERPIENTES[pos];renderTokens();}else if(CARD_CELLS.has(pos))await aplicarCarta(p,robarCarta(CARD_TYPES[pos],FAVORITE_LE_CELLS.has(pos)));}
 async function moverPorDado(p){
   if(p.human)await waitForHumanRoll();else{document.getElementById('turnTitle').textContent=`Turno de ${p.name}`;document.getElementById('turnMessage').textContent='El bot está preparando su tirada...';document.getElementById('rollBtn').disabled=true;showModal('turnModal');await sleep(Math.max(delay*2,1500));if(!running)return;hideModal('turnModal');}
-  if(!running)return; const dado=Math.floor(Math.random()*6)+1;document.getElementById('diceDisplay').textContent='🎲 '+dado;document.getElementById('modalDice').textContent='🎲 '+dado;document.getElementById('turnTitle').textContent=p.human?'Resultado de tu tirada':`Resultado de ${p.name}`;document.getElementById('turnMessage').textContent=`Salió el número ${dado}.`;showModal('turnModal');await sleep(DICE_RESULT_TIME);if(!running)return;hideModal('turnModal');p.pos=Math.min(META,p.pos+dado);renderTokens();await sleep(BOARD_VIEW_TIME);if(!running)return;await resolverCasilla(p);if(!running)return;await sleep(BOARD_VIEW_TIME);if(dado===6&&p.pos<META){await sleep(delay*.6);if(running)await moverPorDado(p);}}
-function puedeGanar(p){return p.pos>=META;}
+  if(!running)return; const dado=Math.floor(Math.random()*6)+1;document.getElementById('diceDisplay').textContent='🎲 '+dado;document.getElementById('modalDice').textContent='🎲 '+dado;document.getElementById('turnTitle').textContent=p.human?'Resultado de tu tirada':`Resultado de ${p.name}`;document.getElementById('turnMessage').textContent=`Salió el número ${dado}.`;showModal('turnModal');await sleep(DICE_RESULT_TIME);if(!running)return;hideModal('turnModal');p.pos=Math.min(META,p.pos+dado);renderTokens();await sleep(BOARD_VIEW_TIME);if(!running)return;await resolverCasilla(p);if(!running)return;if(p.pos>=META&&!p.jugoLE){p.pos=75;renderTokens();document.getElementById('turnInfo').innerHTML=`${p.name} llegó a la meta, pero necesita Libre Elección. Vuelve a la casilla 75.`;await aplicarCarta(p,robarCarta('bono',true));}if(!running)return;await sleep(BOARD_VIEW_TIME);if(dado===6&&p.pos<META){await sleep(delay*.6);if(running)await moverPorDado(p);}}
+function puedeGanar(p){return p.pos>=META&&p.jugoLE;}
 function setOnlineStatus(message){document.getElementById('onlineStatus').textContent=message;}
 function createRoomCode(){return Math.random().toString(36).slice(2,8).toUpperCase();}
 function getOnlineName(){return document.getElementById('onlineName').value.trim()||'Jugador';}
 function updateOnlinePlayers(data){
   const remotePlayers=data.jugadores||{};
   players=Object.entries(remotePlayers).map(([id,player],index)=>({
-    id,name:player.name||`Jugador ${index+1}`,human:id===onlinePlayerId,pos:player.pos||0,turnosPerdidos:player.turnosPerdidos||0,extraTiros:player.extraTiros||0,jugoLE:false,color:player.color||PLAYER_COLORS[index%PLAYER_COLORS.length]
+    id,name:player.name||`Jugador ${index+1}`,human:id===onlinePlayerId,pos:player.pos||0,turnosPerdidos:player.turnosPerdidos||0,extraTiros:player.extraTiros||0,jugoLE:player.jugoLE===true,color:player.color||PLAYER_COLORS[index%PLAYER_COLORS.length]
   }));
   renderTokens();
   const recentRoll=data.lastRollId && data.lastRollId!==lastOnlineRollId;
@@ -128,7 +134,7 @@ function updateOnlinePlayers(data){
     if(data.turn===onlinePlayerId){
       if(recentCard)setTimeout(()=>{if(onlineMode)showOnlineTurn();},DICE_RESULT_TIME+CARD_RESULT_TIME);
       else if(recentRoll)setTimeout(()=>{if(onlineMode)showOnlineTurn();},DICE_RESULT_TIME);
-      else showOnlineTurn();
+      else if(!showingRoll&&!showingCard)showOnlineTurn();
     }else if(!recentRoll&&!recentCard&&!showingRoll&&!showingCard)hideModal('turnModal');
   }else{
     document.getElementById('turnInfo').textContent=`Sala ${onlineRoomId} — esperando jugadores (${total}/2)`;
@@ -190,14 +196,22 @@ async function rollOnlineTurn(){
   if(SERPIENTES[position])position=SERPIENTES[position];
   let card=null;
   if(CARD_CELLS.has(position)){
-    card=robarCarta(CARD_TYPES[position]);
+    card=robarCarta(CARD_TYPES[position],FAVORITE_LE_CELLS.has(position));
     if(card.valor)position=Math.max(0,Math.min(META,position+card.valor));
+  }
+  let hasLE=current.jugoLE||card?.esLE===true;
+  if(position>=META&&!hasLE){
+    position=75;
+    card=robarCarta('bono',true);
+    if(card.valor)position=Math.max(0,Math.min(META,position+card.valor));
+    hasLE=card.esLE===true;
   }
   const other=players.find(player=>player.id!==onlinePlayerId);
   const rollId=`${onlinePlayerId}-${Date.now()}`;
   const cardId=card?`${onlinePlayerId}-card-${Date.now()}`:'';
   const changes={};
   changes[`jugadores/${onlinePlayerId}/pos`]=position;
+  changes[`jugadores/${onlinePlayerId}/jugoLE`]=hasLE;
   if(card?.turnosPerdidos)changes[`jugadores/${onlinePlayerId}/turnosPerdidos`]=(current.turnosPerdidos||0)+card.turnosPerdidos;
   const extraTirosRestantes=Math.max(0,(current.extraTiros||0)-1)+(card?.extraTiros||0);
   changes[`jugadores/${onlinePlayerId}/extraTiros`]=extraTirosRestantes;
@@ -207,7 +221,7 @@ async function rollOnlineTurn(){
   if(card){
     changes.cardEvent={id:cardId,card};
   }
-  if(position>=META){changes.status='finished';changes.winner=current.name;}
+  if(position>=META&&hasLE){changes.status='finished';changes.winner=current.name;}
   else if(dice===6||extraTirosRestantes>0)changes.turn=onlinePlayerId;
   else if(other)changes.turn=other.id;
   lastOnlineRollId=rollId;
@@ -229,7 +243,7 @@ async function createOnlineRoom(){
   const name=getOnlineName();
   onlineRoomId=createRoomCode();
   onlinePlayerId=push(ref(database,`rooms/${onlineRoomId}/jugadores`)).key;
-  await set(ref(database,`rooms/${onlineRoomId}`),{status:'waiting',createdAt:Date.now(),jugadores:{[onlinePlayerId]:{name,pos:0,turnosPerdidos:0,extraTiros:0,color:PLAYER_COLORS[0]}}});
+  await set(ref(database,`rooms/${onlineRoomId}`),{status:'waiting',createdAt:Date.now(),jugadores:{[onlinePlayerId]:{name,pos:0,turnosPerdidos:0,extraTiros:0,jugoLE:false,color:PLAYER_COLORS[0]}}});
   onlineMode=true; running=false; showGameScreen(); buildBoard(); listenToOnlineRoom();
   setOnlineStatus(`Sala creada: ${onlineRoomId}`);
   document.getElementById('turnInfo').textContent=`Sala ${onlineRoomId} — comparte el código con otro jugador`;
@@ -243,7 +257,7 @@ async function joinOnlineRoom(){
   if(Object.keys(room.jugadores||{}).length>=2){setOnlineStatus('La sala ya está llena.');return;}
   onlineRoomId=code; onlinePlayerId=push(ref(database,`rooms/${code}/jugadores`)).key;
   const firstPlayerId=Object.keys(room.jugadores||{})[0];
-  await update(ref(database,`rooms/${code}`),{status:'playing',turn:firstPlayerId,[`jugadores/${onlinePlayerId}`]:{name:getOnlineName(),pos:0,turnosPerdidos:0,extraTiros:0,color:PLAYER_COLORS[1]}});
+  await update(ref(database,`rooms/${code}`),{status:'playing',turn:firstPlayerId,[`jugadores/${onlinePlayerId}`]:{name:getOnlineName(),pos:0,turnosPerdidos:0,extraTiros:0,jugoLE:false,color:PLAYER_COLORS[1]}});
   onlineMode=true; running=false; showGameScreen(); buildBoard(); listenToOnlineRoom();
 }
 async function jugar(){let turno=1,ganador=null;while(!ganador&&running){for(const p of players){if(!running)return;document.getElementById('turnInfo').innerHTML=`Turno ${turno} — le toca a <b>${p.name}</b>`;if(p.turnosPerdidos>0){p.turnosPerdidos--;await sleep(delay*.5);continue;}await moverPorDado(p);if(puedeGanar(p)){ganador=p;break;}}turno++;await sleep(delay*.4);}if(ganador){hideModal('turnModal');hideModal('cardModal');document.getElementById('turnInfo').innerHTML='🎉 ¡Partida terminada!';const banner=document.getElementById('winnerBanner');banner.style.display='block';banner.textContent=`🏆 ${ganador.name} se tituló primero y gana el juego!`;running=false;document.getElementById('startBtn').disabled=false;}}
@@ -269,7 +283,7 @@ document.getElementById('startBtn').addEventListener('click',async()=>{
 });
 document.getElementById('resetBtn').addEventListener('click',()=>{
   if(onlineMode){
-    const resetPlayers={}; players.forEach(player=>{resetPlayers[`jugadores/${player.id}/pos`]=0;resetPlayers[`jugadores/${player.id}/turnosPerdidos`]=0;resetPlayers[`jugadores/${player.id}/extraTiros`]=0;});
+    const resetPlayers={}; players.forEach(player=>{resetPlayers[`jugadores/${player.id}/pos`]=0;resetPlayers[`jugadores/${player.id}/turnosPerdidos`]=0;resetPlayers[`jugadores/${player.id}/extraTiros`]=0;resetPlayers[`jugadores/${player.id}/jugoLE`]=false;});
     update(ref(database,`rooms/${onlineRoomId}`),{...resetPlayers,status:'playing',turn:players[0]?.id||onlinePlayerId,winner:null,lastRoll:null});
     return;
   }
