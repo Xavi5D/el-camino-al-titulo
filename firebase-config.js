@@ -2,7 +2,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.10.0/fireba
 import { getDatabase } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-database.js";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyBukB9lMl9tRZR5pwPMJtllKw8i6PVN9U4",
+  apiKey: "AIzaSyD6tYfwdqQQ7ClfeWLkZAnsjJO3TQlHrU8",
   authDomain: "el-camino-al-titulo.firebaseapp.com",
   databaseURL: "https://el-camino-al-titulo-default-rtdb.firebaseio.com",
   projectId: "el-camino-al-titulo",
